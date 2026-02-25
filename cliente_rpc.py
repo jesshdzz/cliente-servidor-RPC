@@ -5,7 +5,6 @@ def main():
     proxy = xmlrpc.client.ServerProxy("http://localhost:8000/", allow_none=True)
 
     try:
-        # 1. Mostrar catálogo real del servidor
         print("\t=== CATÁLOGO DE VEHÍCULOS ===")
         catalogo = proxy.obtener_catalogo()
         for tipo, info in catalogo.items():

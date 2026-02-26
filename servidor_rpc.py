@@ -98,21 +98,19 @@ class SistemaRentaAutos:
                 'monto_pagar': monto_total
             }
 
-def iniciar_servidor(multihilo=True):
-    host = "localhost"
+def iniciar_servidor():
+    # 0.0.0.0 permite conexiones desde cualquier IP en la red local
+    host = "0.0.0.0"
     puerto = 8000
     
-    if multihilo:
-        print("Iniciando servidor RPC (Modo Multihilo)...")
-        server = ThreadedXMLRPCServer((host, puerto), allow_none=True)
-    else:
-        print("Iniciando servidor RPC (Modo Síncrono/Bloqueante)...")
-        server = xmlrpc.server.SimpleXMLRPCServer((host, puerto), allow_none=True)
+    print("Iniciando servidor RPC...")
+    # Es vital mantener el ThreadedXMLRPCServer para la concurrencia real
+    server = ThreadedXMLRPCServer((host, puerto), allow_none=True)
         
     server.register_instance(SistemaRentaAutos())
-    print(f"Servidor escuchando en {host}:{puerto}. Presiona Ctrl+C para detener.")
+    print(f"Servidor escuchando en todas las interfaces en el puerto {puerto}.")
+    print("Presiona Ctrl+C para detener.")
     server.serve_forever()
 
 if __name__ == "__main__":
-    # Cambia a False para probar la versión bloqueante que procesa usuarios de uno en uno
-    iniciar_servidor(multihilo=False)
+    iniciar_servidor()

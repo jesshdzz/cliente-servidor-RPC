@@ -1,75 +1,124 @@
 import xmlrpc.client
+import sys
+from datetime import datetime
+
+def mostrar_catalogo(catalogo):
+    print("\n" + "="*40)
+    print("--- CATÁLOGO DE VEHÍCULOS (MARZO 2026) ---")
+    print("="*40)
+    for tipo, datos in catalogo.items():
+        print(f"Vehículo: {tipo}")
+        print(f"  - Cupo máximo: {datos['cupo']} personas")
+        print(f"  - Costo por día: ${datos['costo']}")
+        print(f"  - Unidades totales en flotilla: {datos['unidades']}")
+        print("-" * 40)
 
 def main():
-    # Conexión al servidor que proporcionaste
-    proxy = xmlrpc.client.ServerProxy("http://localhost:8000/", allow_none=True)
-
+    print("=== SISTEMA DE RENTA DE AUTOS ===")
+    ip_servidor = input("Ingresa la IP local del servidor (ej. localhost): ").strip()
+    puerto = 8000
+    
+    url_servidor = f"http://{ip_servidor}:{puerto}/"
+    
     try:
-        print("\t=== CATÁLOGO DE VEHÍCULOS ===")
+        proxy = xmlrpc.client.ServerProxy(url_servidor, allow_none=True)
         catalogo = proxy.obtener_catalogo()
-        for tipo, info in catalogo.items():
-            print(f"{tipo:20} | Cupo: {info['cupo']} | Stock Base: {info['unidades']} | Costo: ${info['costo']}")
-        print("-" * 75)
-
-        # 2. Casos de prueba diseñados para activar cada validación del servidor
-        casos_prueba = [
-            {
-                'id': 'Usuario_Isabel',
-                'descripcion': 'SOLICITUD EXITOSA (Todo en orden)',
-                'solicitudes': [
-                    {'tipo': 'Auto 4 puertas', 'ocupantes': 2, 'inicio': '2026-03-01', 'fin': '2026-03-03'},
-                    {'tipo': 'Camioneta 3 puertas', 'ocupantes': 8, 'inicio': '2026-03-10', 'fin': '2026-03-12'}
-                ]
-            },
-            {
-                'id': 'Usuario_Juan',
-                'descripcion': 'FALLO POR CUPO (10 personas en auto de 5)',
-                'solicitudes': [
-                    {'tipo': 'Camioneta 4 puertas', 'ocupantes': 10, 'inicio': '2026-03-15', 'fin': '2026-03-17'}
-                ]
-            },
-            {
-                'id': 'Usuario_Maria',
-                'descripcion': 'FALLO POR LÍMITE DE AUTOS (Intenta rentar 4)',
-                'solicitudes': [
-                    {'tipo': 'Auto 4 puertas', 'ocupantes': 2, 'inicio': '2026-03-01', 'fin': '2026-03-02'},
-                    {'tipo': 'Auto 4 puertas', 'ocupantes': 2, 'inicio': '2026-03-04', 'fin': '2026-03-05'},
-                    {'tipo': 'Auto 4 puertas', 'ocupantes': 2, 'inicio': '2026-03-07', 'fin': '2026-03-08'},
-                    {'tipo': 'Auto 4 puertas', 'ocupantes': 2, 'inicio': '2026-03-10', 'fin': '2026-03-11'}
-                ]
-            },
-            {
-                'id': 'Usuario_Luis',
-                'descripcion': 'FALLO REGLA ESPECIAL (Camioneta 4p en Lunes 02-Mar)',
-                'solicitudes': [
-                    {'tipo': 'Camioneta 4 puertas', 'ocupantes': 3, 'inicio': '2026-03-02', 'fin': '2026-03-04'}
-                ]
-            },
-            {
-                'id': 'Usuario_Ana',
-                'descripcion': 'FALLO POR FECHA (Fuera de marzo 2026)',
-                'solicitudes': [
-                    {'tipo': 'Auto 4 puertas', 'ocupantes': 2, 'inicio': '2026-04-01', 'fin': '2026-04-05'}
-                ]
-            }
-        ]
-
-        # 3. Ejecución de las solicitudes
-        for caso in casos_prueba:
-            print(f"\n>>> EJECUTANDO PRUEBA PARA: {caso['id']}")
-            print(f"Descripción: {caso['descripcion']}")
-            
-            # El servidor procesa todas las reglas que mencionaste
-            resultado = proxy.procesar_renta(caso['id'], caso['solicitudes'])
-            
-            if resultado['exito']:
-                print(f"RESULTADO: {resultado['mensaje']}")
-                print(f"MONTO TOTAL A PAGAR: ${resultado['monto_pagar']}")
-            else:
-                print(f"RESULTADO: FALLIDO - Motivo: {resultado['mensaje']}")
-
+        print("\n[+] Conexión exitosa con el servidor.")
     except Exception as e:
-        print(f"Error de conexión con el servidor: {e}")
+        print(f"\n[!] Error de conexión: No se pudo alcanzar el servidor en {url_servidor}")
+        sys.exit(1)
+
+    usuario_id = input("Ingresa tu identificador de usuario: ").strip()
+    solicitudes = []
+
+    while True:
+        mostrar_catalogo(catalogo)
+        
+        if len(solicitudes) >= 3:
+            print("Has alcanzado el límite de 3 vehículos.")
+            break
+            
+        opcion = input(f"\nUsuario: {usuario_id} | Carrito: {len(solicitudes)}/3\n¿Agregar vehículo? (s/n): ").strip().lower()
+        if opcion != 's':
+            break
+            
+        print("\n1. Auto 4 puertas\n2. Camioneta 4 puertas\n3. Camioneta 3 puertas")
+        seleccion = input("Elige el número del vehículo (1/2/3): ").strip()
+        mapa_seleccion = {'1': 'Auto 4 puertas', '2': 'Camioneta 4 puertas', '3': 'Camioneta 3 puertas'}
+        
+        if seleccion not in mapa_seleccion:
+            print("[!] Selección inválida.")
+            continue
+            
+        tipo_vehiculo = mapa_seleccion[seleccion]
+        cupo_max = catalogo[tipo_vehiculo]['cupo']
+
+        # --- VALIDACIÓN DE OCUPANTES (Bucle hasta que sea correcto) ---
+        while True:
+            try:
+                ocupantes = int(input(f"Cantidad de ocupantes (Máximo {cupo_max}): ").strip())
+                if ocupantes <= 0:
+                    print("[!] La cantidad debe ser mayor a 0.")
+                elif ocupantes > cupo_max:
+                    print(f"[!] Error: El cupo máximo es de {cupo_max} personas.")
+                else:
+                    break # Dato correcto, salimos del bucle de ocupantes
+            except ValueError:
+                print("[!] Ingresa un número entero válido.")
+
+        # --- VALIDACIÓN DE FECHAS (Bucle hasta que sea correcto) ---
+        while True:
+            print("\nFechas para Marzo 2026 (YYYY-MM-DD):")
+            f_inicio_str = input("Fecha de inicio: ").strip()
+            f_fin_str = input("Fecha de fin: ").strip()
+
+            try:
+                inicio = datetime.strptime(f_inicio_str, '%Y-%m-%d').date()
+                fin = datetime.strptime(f_fin_str, '%Y-%m-%d').date()
+
+                # 1. Validar que sean de Marzo 2026
+                if inicio.month != 3 or fin.month != 3 or inicio.year != 2026 or fin.year != 2026:
+                    print("[!] Error: Las fechas deben ser exclusivamente de marzo de 2026.")
+                    continue
+
+                # 2. Validar que inicio no sea mayor a fin
+                if inicio > fin:
+                    print("[!] Error: La fecha de inicio no puede ser mayor a la de fin.")
+                    continue
+
+                # 3. Validar regla especial de Camioneta 4 puertas (Lunes)
+                if tipo_vehiculo == 'Camioneta 4 puertas':
+                    if inicio.weekday() == 0 or fin.weekday() == 0:
+                        print("[!] Error: La 'Camioneta 4 puertas' no se entrega ni recibe los lunes.")
+                        continue
+                
+                # Si pasa todas las pruebas locales
+                fecha_inicio, fecha_fin = f_inicio_str, f_fin_str
+                break 
+
+            except ValueError:
+                print("[!] Formato inválido. Usa YYYY-MM-DD (ej. 2026-03-05).")
+
+        solicitudes.append({
+            'tipo': tipo_vehiculo,
+            'ocupantes': ocupantes,
+            'inicio': fecha_inicio,
+            'fin': fecha_fin
+        })
+        print(f"[+] {tipo_vehiculo} agregado exitosamente.")
+
+    if solicitudes:
+        print("\n" + "="*40)
+        print("Enviando solicitud final al servidor...")
+        try:
+            respuesta = proxy.procesar_renta(usuario_id, solicitudes)
+            if respuesta['exito']:
+                print(f"\n[+] APROBADA: {respuesta['mensaje']}")
+                print(f"Monto total: ${respuesta['monto_pagar']}")
+            else:
+                print(f"\n[-] RECHAZADA: {respuesta['mensaje']}")
+        except Exception as e:
+            print(f"\n[!] Error: {e}")
 
 if __name__ == "__main__":
     main()

@@ -33,9 +33,27 @@ class SistemaRentaAutos:
         """El stub servidor presenta el inventario actual."""
         return self.inventario_marzo
     
-    def obtener_unidades_disponibles(self, tipo):
-        """El stub servidor presenta las unidades disponibles para un tipo de vehículo."""
-        return self.catalogo[tipo]['unidades']
+    def consultar_disponibilidad(self, tipo, str_inicio, str_fin):
+        """Consulta cuántas unidades reales quedan disponibles en el inventario para un rango de fechas."""
+        with self.lock:
+            if tipo not in self.catalogo:
+                return {'exito': False, 'mensaje': f"Vehículo '{tipo}' no existe."}
+            
+            valido, resultado = self._validar_fechas(str_inicio, str_fin)
+            if not valido:
+                return {'exito': False, 'mensaje': resultado}
+            inicio, fin = resultado
+            
+            if tipo == 'Camioneta 4 puertas':
+                if inicio.weekday() == 0 or fin.weekday() == 0:
+                    return {'exito': False, 'mensaje': "La 'Camioneta 4 puertas' no puede iniciar ni entregarse en lunes."}
+
+            min_disponibles = min(self.inventario_marzo[tipo][dia] for dia in range(inicio.day, fin.day + 1))
+            
+            if min_disponibles <= 0:
+                return {'exito': False, 'mensaje': f"No hay suficientes unidades de {tipo} para las fechas seleccionadas."}
+            
+            return {'exito': True, 'unidades': min_disponibles, 'mensaje': "OK"}
 
     def _validar_fechas(self, str_inicio, str_fin):
         """Convierte y valida que las fechas pertenezcan a marzo de 2026."""

@@ -1,5 +1,5 @@
 from socketserver import ThreadingMixIn
-from datetime import datetime, date
+from datetime import datetime
 import xmlrpc.server
 import threading
 

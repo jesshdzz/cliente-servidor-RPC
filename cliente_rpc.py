@@ -78,19 +78,22 @@ class ClienteRentaApp:
         # --- SECCIÓN CATÁLOGO ---
         ttk.Label(self.frame_main, text="Catálogo de Vehículos (Marzo 2026)", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
         
-        columnas = ('tipo', 'cupo', 'costo')
+        columnas = ('tipo', 'cupo', 'costo', 'unidades')
         self.tree_catalogo = ttk.Treeview(self.frame_main, columns=columnas, show='headings', height=4)
         self.tree_catalogo.heading('tipo', text='Vehículo')
         self.tree_catalogo.heading('cupo', text='Cupo Max.')
         self.tree_catalogo.heading('costo', text='Costo/Día')
-        self.tree_catalogo.column('tipo', width=200)
-        self.tree_catalogo.column('cupo', width=100, anchor='center')
-        self.tree_catalogo.column('costo', width=100, anchor='center')
+        self.tree_catalogo.heading('unidades', text='Unidades')
+        self.tree_catalogo.column('tipo', width=180)
+        self.tree_catalogo.column('cupo', width=90, anchor='center')
+        self.tree_catalogo.column('costo', width=90, anchor='center')
+        self.tree_catalogo.column('unidades', width=80, anchor='center')
         self.tree_catalogo.pack(fill="x", pady=5)
 
         tipos_vehiculos = []
         for tipo, datos in self.catalogo.items():
-            self.tree_catalogo.insert('', tk.END, values=(tipo, f"{datos['cupo']} personas", f"${datos['costo']}"))
+            unidades = datos.get('unidades', 0)
+            self.tree_catalogo.insert('', tk.END, values=(tipo, f"{datos['cupo']} personas", f"${datos['costo']}", f"{unidades} u."))
             tipos_vehiculos.append(tipo)
 
         # --- FORMULARIO DE SOLICITUD ---
@@ -106,12 +109,14 @@ class ClienteRentaApp:
         self.entry_ocupantes = ttk.Entry(frame_form, width=10)
         self.entry_ocupantes.grid(row=1, column=1, sticky="w", pady=5, padx=10)
 
-        ttk.Label(frame_form, text="Inicio (YYYY-MM-DD):").grid(row=2, column=0, sticky="w", pady=5)
-        self.entry_inicio = ttk.Entry(frame_form, width=15)
+        ttk.Label(frame_form, text="Día de Inicio (Marzo 2026):").grid(row=2, column=0, sticky="w", pady=5)
+        self.entry_inicio = ttk.Spinbox(frame_form, from_=1, to=31, width=13)
+        self.entry_inicio.set('1')
         self.entry_inicio.grid(row=2, column=1, sticky="w", pady=5, padx=10)
 
-        ttk.Label(frame_form, text="Fin (YYYY-MM-DD):").grid(row=3, column=0, sticky="w", pady=5)
-        self.entry_fin = ttk.Entry(frame_form, width=15)
+        ttk.Label(frame_form, text="Día de Fin (Marzo 2026):").grid(row=3, column=0, sticky="w", pady=5)
+        self.entry_fin = ttk.Spinbox(frame_form, from_=1, to=31, width=13)
+        self.entry_fin.set('1')
         self.entry_fin.grid(row=3, column=1, sticky="w", pady=5, padx=10)
 
         ttk.Button(frame_form, text="Agregar a Solicitud", command=self.agregar_vehiculo).grid(row=4, column=0, columnspan=2, pady=15)
@@ -150,19 +155,25 @@ class ClienteRentaApp:
             return
 
         # Validación 2: Fechas
-        f_inicio_str = self.entry_inicio.get().strip()
-        f_fin_str = self.entry_fin.get().strip()
+        dia_inicio_str = self.entry_inicio.get().strip()
+        dia_fin_str = self.entry_fin.get().strip()
 
         try:
+            dia_inicio = int(dia_inicio_str)
+            dia_fin = int(dia_fin_str)
+
+            if dia_inicio < 1 or dia_inicio > 31 or dia_fin < 1 or dia_fin > 31:
+                messagebox.showerror("Día Inválido", "Los días deben estar entre 1 y 31 de marzo.")
+                return
+
+            f_inicio_str = f"2026-03-{dia_inicio:02d}"
+            f_fin_str = f"2026-03-{dia_fin:02d}"
+
             inicio = datetime.strptime(f_inicio_str, '%Y-%m-%d').date()
             fin = datetime.strptime(f_fin_str, '%Y-%m-%d').date()
 
-            if inicio.month != 3 or fin.month != 3 or inicio.year != 2026 or fin.year != 2026:
-                messagebox.showerror("Error de Fecha", "Las fechas deben ser exclusivamente de marzo de 2026.")
-                return
-
             if inicio > fin:
-                messagebox.showerror("Error Cronológico", "La fecha de inicio no puede ser mayor a la de fin.")
+                messagebox.showerror("Error Cronológico", "El día de inicio no puede ser mayor al de fin.")
                 return
 
             if tipo_vehiculo == 'Camioneta 4 puertas' and (inicio.weekday() == 0 or fin.weekday() == 0):
@@ -170,7 +181,24 @@ class ClienteRentaApp:
                 return
 
         except ValueError:
-            messagebox.showwarning("Formato Inválido", "Usa el formato exacto YYYY-MM-DD (ej. 2026-03-05).")
+            messagebox.showwarning("Formato Inválido", "Ingresa un número de día válido (1 al 31).")
+            return
+
+        # Validación 3: Disponibilidad Dinámica RPC
+        try:
+            resp_disp = self.proxy.consultar_disponibilidad(tipo_vehiculo, f_inicio_str, f_fin_str)
+            if not resp_disp.get('exito', False):
+                messagebox.showerror("Sin Disponibilidad", resp_disp.get('mensaje', 'Error al consultar disponibilidad.'))
+                return
+            
+            unidades_disponibles = resp_disp.get('unidades', 0)
+            unidades_en_carrito = sum(1 for req in self.solicitudes if req['tipo'] == tipo_vehiculo)
+            
+            if unidades_en_carrito >= unidades_disponibles:
+                messagebox.showerror("Límite de Unidades", f"Sólo quedan {unidades_disponibles} unidades disponibles de '{tipo_vehiculo}' para ese rango de fechas y ya las tienes en tu carrito.")
+                return
+        except Exception as e:
+            messagebox.showerror("Error de Red", f"No se pudo contactar al servidor para checar disponibilidad:\n{e}")
             return
 
         # Si todo pasa, agregamos a la lista
@@ -182,13 +210,13 @@ class ClienteRentaApp:
         })
         
         # Actualizamos la interfaz
-        self.list_carrito.insert(tk.END, f"{tipo_vehiculo} | {ocupantes} pax | {f_inicio_str} a {f_fin_str}")
+        self.list_carrito.insert(tk.END, f"{tipo_vehiculo} | {ocupantes} pax | Mar {dia_inicio:02d} - Mar {dia_fin:02d}")
         self.lbl_carrito.config(text=f"Vehículos en carrito: {len(self.solicitudes)} / 3")
         
         # Limpiar campos
         self.entry_ocupantes.delete(0, tk.END)
-        self.entry_inicio.delete(0, tk.END)
-        self.entry_fin.delete(0, tk.END)
+        self.entry_inicio.set('1')
+        self.entry_fin.set('1')
         
         messagebox.showinfo("Éxito", f"{tipo_vehiculo} agregado al carrito.")
 
@@ -209,10 +237,29 @@ class ClienteRentaApp:
                 self.solicitudes.clear()
                 self.list_carrito.delete(0, tk.END)
                 self.lbl_carrito.config(text="Vehículos en carrito: 0 / 3")
+                self.refrescar_catalogo()
             else:
                 messagebox.showerror("Transacción Rechazada ❌", respuesta['mensaje'])
         except Exception as e:
             messagebox.showerror("Error del Servidor", f"Ocurrió un error de comunicación:\n{e}")
+
+    def refrescar_catalogo(self):
+        try:
+            self.catalogo = self.proxy.obtener_catalogo()
+            for item in self.tree_catalogo.get_children():
+                self.tree_catalogo.delete(item)
+            
+            tipos_vehiculos = []
+            for tipo, datos in self.catalogo.items():
+                unidades = datos.get('unidades', 0)
+                self.tree_catalogo.insert('', tk.END, values=(tipo, f"{datos['cupo']} personas", f"${datos['costo']}", f"{unidades} u."))
+                tipos_vehiculos.append(tipo)
+                
+            self.combo_tipo['values'] = tipos_vehiculos
+            if tipos_vehiculos and self.combo_tipo.get() not in tipos_vehiculos:
+                self.combo_tipo.current(0)
+        except Exception as e:
+            print(f"Error actualizando catálogo de UI: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
